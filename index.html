@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>For You</title>
+    <style>
+        body {
+            background-color: #f4f1ea;
+            /* Creamy paper color */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            touch-action: none;
+            /* Prevents scrolling on mobile while winding */
+        }
+
+        #container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+        }
+
+        /* The Crank Image */
+        #crank {
+            width: 100%;
+            height: 100%;
+            background-color: red;
+            /* ADD THIS LINE TO TEST */
+            background-image: url('crank.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            cursor: grab;
+            transition: transform 0.1s linear;
+        }
+
+        #crank.spinning {
+            transition: transform 3s cubic-bezier(0.25, 0.1, 0.25, 1);
+            /* Spin back effect */
+            cursor: default;
+        }
+
+        /* The Progress Bar */
+        #progress-container {
+            width: 200px;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin-top: 50px;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            height: 100%;
+            width: 0%;
+            background: #d4af37;
+            /* Gold color */
+            transition: width 0.2s;
+        }
+
+        #instruction {
+            margin-top: 20px;
+            color: #888;
+            font-size: 14px;
+            opacity: 1;
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="container">
+        <div id="crank"></div>
+    </div>
+
+    <div id="progress-container">
+        <div id="progress-bar"></div>
+    </div>
+
+    <p id="instruction">Wind to listen...</p>
+
+    <audio id="audioPlayer" src="voice.mp3"></audio>
+    <script>
+        const crank = document.getElementById('crank');
+        const progressBar = document.getElementById('progress-bar');
+        const audio = document.getElementById('audioPlayer');
+        const instruction = document.getElementById('instruction');
+
+        let isDragging = false;
+        let startAngle = 0;
+        let currentRotation = 0;
+        let totalWound = 0;
+        const TARGET_ROTATIONS = 3; // How many full spins needed
+        const TARGET_DEGREES = TARGET_ROTATIONS * 360;
+        let isPlaying = false;
+
+        // Get center of the crank
+        function getCenter(element) {
+            const rect = element.getBoundingClientRect();
+            return {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2
+            };
+        }
+
+        // Calculate angle based on mouse/touch position
+        function getAngle(x, y) {
+            const center = getCenter(crank);
+            const deltaX = x - center.x;
+            const deltaY = y - center.y;
+            // Math.atan2 returns radians, convert to degrees
+            let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+            return angle;
+        }
+
+        function startDrag(e) {
+            if (isPlaying) return;
+            isDragging = true;
+            e.preventDefault();
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            startAngle = getAngle(clientX, clientY) - currentRotation;
+            crank.style.cursor = 'grabbing';
+        }
+
+        function rotate(e) {
+            if (!isDragging || isPlaying) return;
+            e.preventDefault();
+
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            const newAngle = getAngle(clientX, clientY);
+            let rotation = newAngle - startAngle;
+
+            // Detect if we are winding forward (clockwise)
+            // This simple logic assumes positive rotation is good
+            // You might need more complex logic for strict "winding" but this works for simple interaction
+
+            currentRotation = rotation;
+            crank.style.transform = `rotate(${currentRotation}deg)`;
+
+            // Update Progress
+            // We use absolute value so winding backwards also counts (easier for user)
+            // or strictly enforce positive numbers. Here we just map rotation to progress.
+            // A simple "distance traveled" approach:
+
+            // Actually, let's just track raw rotation. 
+            // If they spin 1080 degrees (3 times), we play.
+
+            let progress = (Math.abs(currentRotation) / TARGET_DEGREES) * 100;
+
+            if (progress > 100) progress = 100;
+            progressBar.style.width = `${progress}%`;
+
+            if (Math.abs(currentRotation) >= TARGET_DEGREES) {
+                playAudio();
+            }
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            crank.style.cursor = 'grab';
+        }
+
+        function playAudio() {
+            if (isPlaying) return;
+            isPlaying = true;
+            isDragging = false;
+
+            // Visuals
+            instruction.style.opacity = '0'; // Hide text
+            progressBar.style.background = '#50c878'; // Green for success
+
+            // Spin back animation
+            crank.classList.add('spinning');
+            // Make it spin back to 0 or keep spinning fast
+            crank.style.transform = `rotate(${currentRotation + 720}deg)`;
+
+            // Audio
+            audio.play().catch(e => console.log("Interaction required first usually, but drag handled it."));
+
+            // Reset after audio ends (optional)
+            audio.onended = () => {
+                instruction.innerText = "Replay?";
+                instruction.style.opacity = '1';
+                isPlaying = false;
+                currentRotation = 0;
+                crank.style.transform = `rotate(0deg)`;
+                crank.classList.remove('spinning');
+                progressBar.style.width = '0%';
+            };
+        }
+
+        // Mouse Events
+        crank.addEventListener('mousedown', startDrag);
+        window.addEventListener('mousemove', rotate);
+        window.addEventListener('mouseup', stopDrag);
+
+        // Touch Events (Mobile)
+        crank.addEventListener('touchstart', startDrag, { passive: false });
+        window.addEventListener('touchmove', rotate, { passive: false });
+        window.addEventListener('touchend', stopDrag);
+
+    </script>
+</body>
+
+</html>
